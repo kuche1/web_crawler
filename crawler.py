@@ -4,8 +4,6 @@
 #
 # ? make it so that downloads take into account javascript (this might backfire - what is there is a crypto miner in the website; add max time to load?)
 #
-# check for errors for each daemon, log and restart
-#
 # sometimes the download of a page takes too long (workaround: use more threads for downloading)
 
 # TODO B
