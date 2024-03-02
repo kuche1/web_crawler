@@ -521,6 +521,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('dedup_daemons', type=int)
+    # 1 here doesn't cause a bottleneck
 
     parser.add_argument('download_daemons', type=int)
     # threads - pages per 10 seconds:
