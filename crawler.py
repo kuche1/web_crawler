@@ -8,7 +8,7 @@ import requests
 import shutil
 import argparse
 import tempfile
-from typing import Optional, Iterator
+from typing import Optional, Iterator, Callable
 import random
 import re
 import threading
@@ -146,7 +146,8 @@ def extract_link_website(link:str) -> str:
     return f'{data.scheme}://{data.netloc}'
 
 def download_to_file(file:str, link:str) -> Optional[bool]:
-    # TODO make it so that the download happens gradually
+    # TODO? use another method that runs the javascript if any
+    # TODO? make it so that the download happens gradually
 
     # TODO this is not the best place for this
     from urllib3.exceptions import InsecureRequestWarning # type: ignore
@@ -175,13 +176,13 @@ def download_to_file(file:str, link:str) -> Optional[bool]:
 def gen_filename() -> str:
     return f'{time.time()}'
 
-def read_file_line(file:str) -> str:
+def read_file(file:str) -> str:
     with open(file) as f:
-        #return f.read()
-        data = f.readline()
-        if data.endswith('\n'):
-            data = data[:-1]
-        return data
+        return f.read()
+        # data = f.readline()
+        # if data.endswith('\n'):
+        #     data = data[:-1]
+        # return data
 
 def write_file(file:str, data:str) -> None:
     with open(file, 'w') as f:
@@ -271,10 +272,12 @@ def thr_dedup(thread_id:int, number_threads:int) -> None:
 
         for file_name, file_path in get_nodes_that_are_to_be_processed_by_this_thread(FOLDER_DEDUP, FOLDER_DEDUP_FAIL, thread_id, number_threads, use_files=True):
 
-            link = read_file_line(file_path)
-            # if '\n' in link:
-            #     idx = link.index('\n')
-            #     link = link[:idx]
+            link = read_file(file_path)
+            if '\n' in link:
+                idx = link.index('\n')
+                link = link[:idx]
+                write_file(file_path, link)
+                continue
 
             # TODO? decode URL (what is url is decoded but has weird characters in name that makes decoding it again fuck it up?)
 
@@ -294,7 +297,7 @@ def thr_download(thread_id:int, number_threads:int) -> None:
         
         for file_name, file_path in get_nodes_that_are_to_be_processed_by_this_thread(FOLDER_DOWNLOAD, FOLDER_DOWNLOAD_FAIL, thread_id, number_threads, use_files=True):
 
-            link = read_file_line(file_path)
+            link = read_file(file_path)
 
             domain = extract_link_domain(link)
             if len(domain) == 0:
@@ -367,7 +370,7 @@ def thr_scan(thread_id:int, number_threads:int) -> None:
             file_link = os.path.join(folder_root, FILENAME_LINK)
             file_data = os.path.join(folder_root, FILENAME_DATA)
 
-            link = read_file_line(file_link)
+            link = read_file(file_link)
             website = extract_link_website(link)
 
             # print(f'scanning for links in: {file_data}')
@@ -394,7 +397,7 @@ def thr_save(thread_id:int, number_threads:int) -> None:
             # print(f'saving folder: {folder_root}')
             
             if os.path.isfile(file_link) and os.path.isfile(file_data):
-                link = read_file_line(file_link)
+                link = read_file(file_link)
                 nested_folders_name = string_as_nested_folders(link)
 
                 location = os.path.join(FOLDER_DONE, nested_folders_name)
@@ -410,6 +413,16 @@ def thr_save(thread_id:int, number_threads:int) -> None:
         time.sleep(THR_LOOP_DONE_SLEEP)
 
 # thread starter
+
+def start_daemon(fnc:Callable[[int,int], None], thr_id:int, number_threads:int) -> None:
+    pid = os.fork() # TODO use multiprocessing so that if the parent dies the children also die (kinda)
+    if not pid: # child
+        while True:
+            fnc(thr_id, number_threads)
+            # TODO check for errors and log; then restart
+        return
+
+    # threading.Thread(target=fnc, args=(thr_id, num_threads)).start()
 
 def main(dedup_threads:int, download_threads:int, scan_threads:int, save_threads:int) -> None:
 
@@ -442,19 +455,9 @@ def main(dedup_threads:int, download_threads:int, scan_threads:int, save_threads
         (thr_save, save_threads),
     )
 
-    pids = []
-
     for fnc, num_threads in pairs_fnc_threads:
         for thr_id in range(num_threads):
-
-            pid = os.fork() # TODO use multiprocessing so that if the parent dies the children also die (kinda)
-            if not pid: # child
-                fnc(thr_id, num_threads)
-                return
-            
-            pids.append(pid)
-
-            # threading.Thread(target=fnc, args=(thr_id, num_threads)).start()
+            start_daemon(fnc, thr_id, num_threads)
 
     # kill_all = False
 
