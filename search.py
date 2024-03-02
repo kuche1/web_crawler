@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from typing import Optional
+from typing import Optional, Literal
 import subprocess
 
 import termcolor
@@ -10,8 +10,8 @@ import termcolor
 from crawler import FOLDER_DONE
 from crawler import nested_folders_as_string
 
-RESULT_COLOR = 'red'
-FILE_PATH_COLOR = 'dark_grey'
+RESULT_COLOR:Literal['red'] = 'red'
+FILE_PATH_COLOR:Literal['dark_grey'] = 'dark_grey'
 
 # returns files that contain the given text
 def grep(text:str, node:str) -> list[str]:

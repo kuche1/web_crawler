@@ -5,6 +5,8 @@
 # ? make it so that downloads take into account javascript (this might backfire - what is there is a crypto miner in the website; add max time to load?)
 #
 # check for errors for each daemon, log and restart
+#
+# sometimes the download of a page takes too long (workaround: use more threads for downloading)
 
 # TODO B
 #
@@ -41,6 +43,7 @@ from bs4 import BeautifulSoup
 import bs4.builder
 import psutil
 import signal
+import traceback
 
 # stop complainin about selfsigned certificates
 from urllib3.exceptions import InsecureRequestWarning
@@ -64,23 +67,30 @@ FOLDER_SAVE_FAIL     = os.path.join(FOLDER_ROOT, 'save_fail')
 
 FOLDER_DOMAIN_INFO = os.path.join(FOLDER_ROOT, 'domain_info')
 
-FILE_ERROR_LOG = os.path.join(FOLDER_ROOT, 'error_log')
+FOLDER_LOGS = os.path.join(FOLDER_ROOT, 'logs')
+FILE_ERROR_LOG = os.path.join(FOLDER_LOGS, 'error_log')
+FOLDER_CRASH_LOG = os.path.join(FOLDER_LOGS, 'crash_log')
 
 FILENAME_LINK = 'link'
 FILENAME_DATA = 'data'
 
-DOMAIN_COOLDOWN = 5.0 # how much time to wait between newtwork requests for each domain
+DOMAIN_COOLDOWN = 4.0 # how much time to wait between newtwork requests for each domain
 DOMAIN_MTIME_CHECK_SAFETY_SLEEP_MAX = 0.1 # random amount of time to wait between 0 and this, so that it's much less likely to collide with another thread checking for the mtime of the same domain
 
 THR_NODE_ID_MULTIPLIER = 100 # making this higher makes thread offloading more random; making this too high will fuck shit up and make only 1 thread do all
                              # the work; see the output of time.time()
-THR_LOOP_DONE_SLEEP = 4.0
+THR_LOOP_DONE_SLEEP = 3.0
 
 # functions logs
 
 def log_error(text:str) -> None:
     text = text + '\n'
     with open(FILE_ERROR_LOG, 'a') as f:
+        f.write(text)
+
+def log_crash(text:str) -> None:
+    name = gen_filename()
+    with open(os.path.join(FOLDER_CRASH_LOG, name), 'w') as f:
         f.write(text)
 
 # functions data processing
@@ -147,6 +157,9 @@ def extract_links_from_file(path:str, website:str) -> list[str]:
         
         if url.startswith('/'):
             url = website + url
+        
+        if len(extract_link_domain(url)) == 0:
+            url = f'{website}/{url}'
 
         if url not in urls_clean:
             urls_clean.append(url)
@@ -180,7 +193,10 @@ def download_to_file(file:str, link:str) -> Optional[bool]:
     try:
         response = requests.get(link, verify=False) # `verify=False` do not check certificates
     except requests.exceptions.ConnectionError:
-        log_error(f'could not open link `{link=}`')
+        log_error(f'could not open link; {link=}')
+        return False
+    except requests.exceptions.InvalidURL:
+        log_error(f'invalid URL; {link=}')
         return False
     except requests.exceptions.TooManyRedirects:
         return False
@@ -318,6 +334,8 @@ def thr_dedup(thread_id:int, number_threads:int) -> None:
 
 def thr_download(thread_id:int, number_threads:int) -> None:
     while True:
+
+        # print('new loop')
         
         for file_name, file_path in get_nodes_that_are_to_be_processed_by_this_thread(FOLDER_DOWNLOAD, FOLDER_DOWNLOAD_FAIL, thread_id, number_threads, use_files=True):
 
@@ -329,7 +347,7 @@ def thr_download(thread_id:int, number_threads:int) -> None:
                 delete_file(file_path)
                 continue
 
-            # print(f'processing domain `{domain}`; {file_path=}')
+            # print(f'processing {domain=}')
 
             # check mtime
 
@@ -342,6 +360,7 @@ def thr_download(thread_id:int, number_threads:int) -> None:
                 now = time.time()
 
                 if abs(now - mtime) < DOMAIN_COOLDOWN: # using abs in case the metadata is bad
+                    # print(f'domain overloaded `{domain}`')
                     continue
 
                 update_mtime(domain_mtime_file)
@@ -349,8 +368,6 @@ def thr_download(thread_id:int, number_threads:int) -> None:
                 write_file(domain_mtime_file, '')
 
             # download data
-
-            # print(f'downloading data from link `{link}`; {file_path=}')
 
             file_data_tmp = gen_file()
             succ = download_to_file(file_data_tmp, link)
@@ -428,7 +445,8 @@ def thr_save(thread_id:int, number_threads:int) -> None:
                 location = os.path.join(location, gen_filename()) # this does mean that we'll keep the old versions (this might get heavy)
                 move_node(file_data, location)
             else:
-                print(f'ERROR: corrupted folder `{folder_path}`')
+                print(f'ERROR: corrupted folder `{folder_path}`; moving to failed folder')
+                move_node(folder_path, os.path.join(FOLDER_SAVE_FAIL, folder_name))
             
             delete_folder(folder_path)
         
@@ -436,12 +454,16 @@ def thr_save(thread_id:int, number_threads:int) -> None:
 
 # thread starter
 
-def start_daemon(fnc:Callable[[int,int], None], thr_id:int, number_threads:int) -> None:
+def start_daemon(fnc:Callable[[int,int], None], thr_id:int, number_threads:int) -> int:
     pid = os.fork()
     if not pid: # child
         while True:
-            fnc(thr_id, number_threads)
-        return
+            try:
+                fnc(thr_id, number_threads)
+            except:
+                err_info = traceback.format_exc()
+            log_crash(err_info)
+    return pid
 
     # threading.Thread(target=fnc, args=(thr_id, num_threads)).start()
 
@@ -462,6 +484,9 @@ def main(dedup_threads:int, download_threads:int, scan_threads:int, save_threads
         FOLDER_SAVE_FAIL,
 
         FOLDER_DOMAIN_INFO,
+
+        FOLDER_LOGS,
+        FOLDER_CRASH_LOG,
     )
 
     for folder in folders:
@@ -476,19 +501,44 @@ def main(dedup_threads:int, download_threads:int, scan_threads:int, save_threads
         (thr_save, save_threads),
     )
 
+    pids = []
     for fnc, num_threads in pairs_fnc_threads:
         for thr_id in range(num_threads):
-            start_daemon(fnc, thr_id, num_threads)
+            pid = start_daemon(fnc, thr_id, num_threads)
+            pids.append(pid)
 
-    while True:
-        time.sleep(5)
+    print('Press enter to send SIGTERM to all children')
+    input()
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    
+    print('SIGTERM sent')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+
     parser.add_argument('dedup_daemons', type=int)
+
     parser.add_argument('download_daemons', type=int)
+    # threads - pages per 10 seconds:
+    #   1 -   0
+    #   2 -  12
+    #   4 -  24
+    #   8 -  37
+    #  16 -  60
+    #  32 -  78
+    #  64 - 105
+    # 128 - 173
+
     parser.add_argument('scan_daemons', type=int)
+
     parser.add_argument('save_daemons', type=int)
+
     args = parser.parse_args()
 
     main(args.dedup_daemons, args.download_daemons, args.scan_daemons, args.save_daemons)
