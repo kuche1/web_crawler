@@ -5,66 +5,114 @@ import os
 from typing import Optional
 import subprocess
 
+import termcolor
+
 from crawler import FOLDER_DONE
 from crawler import nested_folders_as_string
 
-def term(cmd:list[str]) -> str:
-    out = subprocess.run(cmd, capture_output=True, check=True)
-    return out.stdout.decode()
+RESULT_COLOR = 'red'
+FILE_PATH_COLOR = 'dark_grey'
 
-def links_that_contain_search_term(search_term:str) -> list[str]:
-    out = term(['grep', '-rIil', '--', search_term, FOLDER_DONE])
+# returns files that contain the given text
+def grep(text:str, node:str) -> list[str]:
+    shell = subprocess.run(['grep', '-rIil', '--', text, node], capture_output=True)
+    if shell.returncode != 0:
+        return []
 
-    out = out.split('\n')
-    while '' in out:
-        out.remove('')
+    files = shell.stdout.decode().split('\n')
+    while '' in files:
+        files.remove('')
 
-    for idx, item in enumerate(out):
-        item = item[len(FOLDER_DONE):]
-        if item.startswith('/'):
-            item = item[1:]
-        out[idx] = item
+    return files
 
-    return out
+# def links_that_contain_search_term(search_term:str) -> list[str]:
+#     # out = term(['grep', '-rIil', '--', search_term, FOLDER_DONE])
 
-def file_contains_search_term(file:str, search_term:str) -> bool:
-    try:
-        term(['grep', '-rIil', '--', search_term, file]) # TODO duplicate of the grep above
-    except subprocess.CalledProcessError:
-        return False
-    return True
+#     # out = out.split('\n')
+#     # while '' in out:
+#     #     out.remove('')
 
-def grep(search_term:str, search_in:Optional[list[str]]=None) -> list[str]:
-    if search_in is None:
-        return links_that_contain_search_term(search_term)
+#     out = grep(search_term, FOLDER_DONE)
+
+#     for idx, item in enumerate(out):
+#         item = item[len(FOLDER_DONE):]
+#         if item.startswith('/'):
+#             item = item[1:]
+#         out[idx] = item
+
+#     return out
+
+# def file_contains_search_term(file:str, search_term:str) -> bool:
+#     try:
+#         term(['grep', '-rIil', '--', search_term, file]) # TODO duplicate of the grep above
+#     except subprocess.CalledProcessError:
+#         return False
+#     return True
+
+# def grep(search_term:str, search_in:Optional[list[str]]=None) -> list[str]:
+#     if search_in is None:
+#         return links_that_contain_search_term(search_term)
     
-    valid = []
-    for file in search_in:
-        if file_contains_search_term(file, search_term):
-            valid.append(file)
+#     valid = []
+#     for file in search_in:
+#         if file_contains_search_term(file, search_term):
+#             valid.append(file)
     
-    return valid
+#     return valid
 
-def main():
+def main() -> None:
 
-    is_first_term = True
+    initial_search = True
+    files_containing_search_terms:list[str] = []
 
     while True:
         print()
         search_term = input('Enter search term: ')
 
-        if is_first_term:
-            is_first_term = False
-            results_left = grep(search_term)
+        if initial_search:
+            initial_search = False
+            files_containing_search_terms = grep(search_term, FOLDER_DONE)
         else:
-            results_left = grep(search_term, results_left)
+            for idx, file in reversed(list(enumerate(files_containing_search_terms))):
+                if len(grep(search_term, file)) == 0:
+                    del files_containing_search_terms[idx]
         
         print()
-        print('Results:')
-        for result in results_left:
-            result = '/'.join(result.split('/')[:-1]) # the very last item is the file containing the data
-            result = nested_folders_as_string(result)
-            print(result)
+        for file in files_containing_search_terms:
+
+            name = file
+
+            name = name[len(FOLDER_DONE):]
+
+            if name.startswith('/'):
+                name = name[1:]
+
+            name = os.path.dirname(name) # get rid of the folder
+
+            name = nested_folders_as_string(name)
+
+            print()
+            print(termcolor.colored(name, RESULT_COLOR))
+            print(termcolor.colored(file, FILE_PATH_COLOR))
+
+    # is_first_term = True
+
+    # while True:
+    #     print()
+    #     search_term = input('Enter search term: ')
+
+    #     if is_first_term:
+    #         is_first_term = False
+    #         results_left = grep(search_term)
+    #     else:
+    #         results_left = grep(search_term, results_left)
+        
+    #     print()
+    #     print('Results:')
+    #     for result in results_left:
+    #         result = '/'.join(result.split('/')[:-1]) # the very last item is the file containing the data
+    #         result = nested_folders_as_string(result)
+    #         print(result)
 
     # for path, folders, _files in os.walk(FOLDER_DONE):
     #     if len(folders) != 0:

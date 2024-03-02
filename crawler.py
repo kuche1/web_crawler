@@ -247,10 +247,10 @@ def string_as_nested_folders(string:str) -> str:
     return path
 
 def nested_folders_as_string(nested_folders:str) -> str:
-    chars = nested_folders.split('/')
-    chars = [chr(int(char)) for char in chars]
-    chars = ''.join(chars)
-    return chars
+    chars_coded = nested_folders.split('/')
+    chars = [chr(int(char)) for char in chars_coded]
+    string = ''.join(chars)
+    return string
 
 # functions thread code
 

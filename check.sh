@@ -2,5 +2,7 @@
 
 set -euo pipefail
 
-mypy --strict crawler.py
-mypy --strict search.py
+HERE=$(dirname "$BASH_SOURCE")
+
+mypy --strict "$HERE/crawler.py"
+mypy --strict "$HERE/search.py"
