@@ -1,5 +1,28 @@
 #! /usr/bin/env python3
 
+# TODO A
+#
+# use more ways of extracting links from downloaded data
+#
+# make bs4 automatically determine filetype, and use the appropriate extractor
+# or make it shut up about parsing xml with html parser
+#
+# make it so that download happens gradually (what if we're downloading a 10GB file? are we going to waste 10GB fo ram?)
+#
+# make it so that downloads take into account javascript
+#
+# ? make it so that the duplicate hecker actually checks all folders and not just the done folder
+#
+# make it so that the duplicate checker takes into account when the last crawl of a given page took place
+#
+# decode urls? a+b is the same as a%20b
+#
+# dynamically increase/decrease wait time for each domain
+#
+# check for errors for each daemon, log and restart
+#
+# use something prettyer, other than fork
+
 import os
 import time
 import math
@@ -15,6 +38,11 @@ import threading
 from bs4 import BeautifulSoup
 import psutil
 import signal
+
+# stop complainin about selfsigned certificates
+from urllib3.exceptions import InsecureRequestWarning
+import requests.packages.urllib3 # type: ignore
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 HERE = os.path.dirname(__file__)
 
@@ -55,7 +83,6 @@ def log_error(text:str) -> None:
 # functions data processing
 
 def extract_links_from_file(path:str, website:str) -> list[str]:
-    # TODO? find a better way
 
     if website.endswith('/'):
         website = website[:-1]
@@ -97,8 +124,6 @@ def extract_links_from_file(path:str, website:str) -> list[str]:
         # https://www.geeksforgeeks.org/extract-all-the-urls-from-the-webpage-using-python/
 
         soup = BeautifulSoup(data, 'html.parser')
-        # TODO make it shut up if I'm parsing an XML
-        # TODO automatically determine content type
 
         for link in soup.find_all('a'):
             link = link.get('href')
@@ -146,16 +171,8 @@ def extract_link_website(link:str) -> str:
     return f'{data.scheme}://{data.netloc}'
 
 def download_to_file(file:str, link:str) -> Optional[bool]:
-    # TODO? use another method that runs the javascript if any
-    # TODO? make it so that the download happens gradually
-
-    # TODO this is not the best place for this
-    from urllib3.exceptions import InsecureRequestWarning # type: ignore
-    import requests.packages.urllib3 # type: ignore
-    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
     try:
-        response = requests.get(link, verify=False) # do not check certificates
+        response = requests.get(link, verify=False) # `verify=False` do not check certificates
     except requests.exceptions.ConnectionError:
         log_error(f'could not open link `{link=}`')
         return False
@@ -166,7 +183,7 @@ def download_to_file(file:str, link:str) -> Optional[bool]:
     if not response.ok:
         return False
     
-    with open(file, 'wb') as f: # TODO dano raboti, ne sum testval
+    with open(file, 'wb') as f:
         f.write(response.content)
     
     return True
@@ -248,8 +265,6 @@ def get_nodes_that_are_to_be_processed_by_this_thread(folder:str, folder_fail:st
         yield node_name, node_path
 
 def link_has_already_been_processed_not_too_long_ago(link:str) -> bool:
-    # TODO? scan all folders and not just done
-
     as_nested_folder_path = string_as_nested_folders(link)
 
     folder_done = os.path.join(FOLDER_DONE, as_nested_folder_path)
@@ -260,7 +275,6 @@ def link_has_already_been_processed_not_too_long_ago(link:str) -> bool:
     for _path, _folders, files in os.walk(folder_done):
         break
     if len(files) > 0:
-        # TODO check the mtime (or the file name)
         return True
     
     return False
@@ -278,10 +292,6 @@ def thr_dedup(thread_id:int, number_threads:int) -> None:
                 link = link[:idx]
                 write_file(file_path, link)
                 continue
-
-            # TODO? decode URL (what is url is decoded but has weird characters in name that makes decoding it again fuck it up?)
-
-            # print(f'processing link: {link}')
 
             # scan
 
@@ -337,13 +347,11 @@ def thr_download(thread_id:int, number_threads:int) -> None:
                 delete_file(file_data_tmp)
 
                 if succ is False:
-                    # TODO save this to another file to try again later?
                     delete_file(file_path)
-                    # print(f'could not download data from link: {link}')
                     continue
                 elif succ is None: # too many requests
                     print(f'link rate limited: {link}')
-                    continue # TODO somehow indicate that this domain is overloaded
+                    continue
                 else:
                     assert False
 
@@ -415,11 +423,10 @@ def thr_save(thread_id:int, number_threads:int) -> None:
 # thread starter
 
 def start_daemon(fnc:Callable[[int,int], None], thr_id:int, number_threads:int) -> None:
-    pid = os.fork() # TODO use multiprocessing so that if the parent dies the children also die (kinda)
+    pid = os.fork()
     if not pid: # child
         while True:
             fnc(thr_id, number_threads)
-            # TODO check for errors and log; then restart
         return
 
     # threading.Thread(target=fnc, args=(thr_id, num_threads)).start()
