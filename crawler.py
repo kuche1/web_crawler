@@ -42,6 +42,7 @@ import bs4.builder
 import psutil
 import signal
 import traceback
+import urllib3
 
 # stop complainin about selfsigned certificates
 from urllib3.exceptions import InsecureRequestWarning
@@ -197,6 +198,8 @@ def download_to_file(file:str, link:str) -> Optional[bool]:
         log_error(f'invalid URL; {link=}')
         return False
     except requests.exceptions.TooManyRedirects:
+        return False
+    except urllib3.exceptions.ProtocolError:
         return False
 
     if response.status_code == 429: # too many requests
@@ -524,14 +527,16 @@ if __name__ == '__main__':
     # 1 here doesn't cause a bottleneck
 
     parser.add_argument('download_daemons', type=int)
+    # biggest bottleneck
     # threads - pages per 10 seconds:
     #   1 -   0
     #   2 -  13
     #   4 -  21
     #   8 -  27
-    #  16 -  34
+    #  16 -  34 (seems reasonable)
 
     parser.add_argument('scan_daemons', type=int)
+    # 1 is able to push the queue length to 0 from time to time
 
     parser.add_argument('save_daemons', type=int)
 
