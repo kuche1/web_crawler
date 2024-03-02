@@ -2,26 +2,28 @@
 
 # TODO A
 #
-# use more ways of extracting links from downloaded data
+# ? make it so that downloads take into account javascript (this might backfire - what is there is a crypto miner in the website; add max time to load?)
+#
+# check for errors for each daemon, log and restart
+
+# TODO B
 #
 # make bs4 automatically determine filetype, and use the appropriate extractor
 # or make it shut up about parsing xml with html parser
 #
 # make it so that download happens gradually (what if we're downloading a 10GB file? are we going to waste 10GB fo ram?)
 #
-# make it so that downloads take into account javascript
-#
 # ? make it so that the duplicate hecker actually checks all folders and not just the done folder
 #
 # make it so that the duplicate checker takes into account when the last crawl of a given page took place
 #
-# decode urls? a+b is the same as a%20b
-#
 # dynamically increase/decrease wait time for each domain
 #
-# check for errors for each daemon, log and restart
-#
 # use something prettyer, other than fork
+#
+# use more ways of extracting links from downloaded data
+#
+# decode urls? a+b is the same as a%20b
 
 import os
 import time
@@ -465,24 +467,6 @@ def main(dedup_threads:int, download_threads:int, scan_threads:int, save_threads
     for fnc, num_threads in pairs_fnc_threads:
         for thr_id in range(num_threads):
             start_daemon(fnc, thr_id, num_threads)
-
-    # kill_all = False
-
-    # while not kill_all:
-    #     time.sleep(4)
-    #     for pid in pids:
-    #         if not psutil.pid_exists(pid):
-    #             print(f'ERROR: daemon has died; {pid=}')
-    #             kill_all = True
-    #             break
-    
-    # for pid in pids:
-    #     os.kill(pid, signal.SIGTERM)
-
-    # time.sleep(4)
-
-    # for pid in pids:
-    #     os.kill(pid, signal.SIGKILL)
 
     while True:
         time.sleep(5)
