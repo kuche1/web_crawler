@@ -38,6 +38,7 @@ import random
 import re
 import threading
 from bs4 import BeautifulSoup
+import bs4.builder
 import psutil
 import signal
 
@@ -68,12 +69,12 @@ FILE_ERROR_LOG = os.path.join(FOLDER_ROOT, 'error_log')
 FILENAME_LINK = 'link'
 FILENAME_DATA = 'data'
 
-DOMAIN_COOLDOWN = 5 # how much time to wait between newtwork requests for each domain
+DOMAIN_COOLDOWN = 5.0 # how much time to wait between newtwork requests for each domain
 DOMAIN_MTIME_CHECK_SAFETY_SLEEP_MAX = 0.1 # random amount of time to wait between 0 and this, so that it's much less likely to collide with another thread checking for the mtime of the same domain
 
 THR_NODE_ID_MULTIPLIER = 100 # making this higher makes thread offloading more random; making this too high will fuck shit up and make only 1 thread do all
                              # the work; see the output of time.time()
-THR_LOOP_DONE_SLEEP = 5.0
+THR_LOOP_DONE_SLEEP = 4.0
 
 # functions logs
 
@@ -125,13 +126,16 @@ def extract_links_from_file(path:str, website:str) -> list[str]:
 
         # https://www.geeksforgeeks.org/extract-all-the-urls-from-the-webpage-using-python/
 
-        soup = BeautifulSoup(data, 'html.parser')
-
-        for link in soup.find_all('a'):
-            link = link.get('href')
-            if link is None:
-                continue
-            urls.append(link)
+        try:
+            soup = BeautifulSoup(data, 'html.parser')
+        except bs4.builder.ParserRejectedMarkup:
+            pass
+        else:
+            for link in soup.find_all('a'):
+                link = link.get('href')
+                if link is None:
+                    continue
+                urls.append(link)
 
 
     urls_clean = []
@@ -177,6 +181,8 @@ def download_to_file(file:str, link:str) -> Optional[bool]:
         response = requests.get(link, verify=False) # `verify=False` do not check certificates
     except requests.exceptions.ConnectionError:
         log_error(f'could not open link `{link=}`')
+        return False
+    except requests.exceptions.TooManyRedirects:
         return False
 
     if response.status_code == 429: # too many requests
@@ -239,6 +245,12 @@ def string_as_nested_folders(string:str) -> str:
         path = os.path.join(path, code)
     
     return path
+
+def nested_folders_as_string(nested_folders:str) -> str:
+    chars = nested_folders.split('/')
+    chars = [chr(int(char)) for char in chars]
+    chars = ''.join(chars)
+    return chars
 
 # functions thread code
 
