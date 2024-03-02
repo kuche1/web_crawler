@@ -527,13 +527,10 @@ if __name__ == '__main__':
     parser.add_argument('download_daemons', type=int)
     # threads - pages per 10 seconds:
     #   1 -   0
-    #   2 -  12
-    #   4 -  24
-    #   8 -  37
-    #  16 -  60
-    #  32 -  78
-    #  64 - 105
-    # 128 - 173
+    #   2 -  13
+    #   4 -  21
+    #   8 -  27
+    #  16 -  34
 
     parser.add_argument('scan_daemons', type=int)
 
