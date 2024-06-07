@@ -36,7 +36,9 @@ def main() -> None:
 
         if initial_search:
             initial_search = False
+            print("compiling initial list...")
             files_containing_search_terms = grep(search_term, FOLDER_DONE)
+            print("initial list compiled")
         else:
             for idx, file in reversed(list(enumerate(files_containing_search_terms))):
                 if len(grep(search_term, file)) == 0:
