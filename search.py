@@ -15,15 +15,39 @@ FILE_PATH_COLOR:Literal['dark_grey'] = 'dark_grey'
 
 # returns files that contain the given text
 def grep(text:str, file_or_folder:str) -> list[str]:
-    shell = subprocess.run(['grep', '-rIil', '--', text, file_or_folder], capture_output=True)
-    if shell.returncode != 0:
-        return []
 
-    files = shell.stdout.decode().split('\n')
-    while '' in files:
-        files.remove('')
+    shell = subprocess.Popen(['grep', '-rIil', '--', text, file_or_folder], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    return files
+    while True:
+        line = shell.stdout.readline()
+
+        if line == '' and shell.poll() is not None:
+            return
+        
+        if line.endswith('\n'):
+            line = line[:-1]
+        
+        if line == '':
+            return
+        
+        yield line
+
+def print_result(file):
+    print()
+
+    name = file
+
+    name = name[len(FOLDER_DONE):]
+
+    if name.startswith('/'):
+        name = name[1:]
+
+    name = os.path.dirname(name) # get rid of the folder
+
+    name = nested_folders_as_string(name)
+
+    print(termcolor.colored(name, RESULT_COLOR))
+    print(termcolor.colored(file, FILE_PATH_COLOR))
 
 def main() -> None:
 
@@ -34,33 +58,22 @@ def main() -> None:
         print()
         search_term = input('Enter search term: ')
 
+        print()
+
         if initial_search:
             initial_search = False
-            print("compiling initial list...")
-            files_containing_search_terms = grep(search_term, FOLDER_DONE)
-            print("initial list compiled")
+
+            for file in grep(search_term, FOLDER_DONE):
+                files_containing_search_terms.append(file)
+                print_result(file)
+
         else:
+
             for idx, file in reversed(list(enumerate(files_containing_search_terms))):
-                if len(grep(search_term, file)) == 0:
+                if len(list(grep(search_term, file))) == 0:
                     del files_containing_search_terms[idx]
-        
-        print()
-        for file in files_containing_search_terms:
-
-            name = file
-
-            name = name[len(FOLDER_DONE):]
-
-            if name.startswith('/'):
-                name = name[1:]
-
-            name = os.path.dirname(name) # get rid of the folder
-
-            name = nested_folders_as_string(name)
-
-            print()
-            print(termcolor.colored(name, RESULT_COLOR))
-            print(termcolor.colored(file, FILE_PATH_COLOR))
+                else:
+                    print_result(file)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
