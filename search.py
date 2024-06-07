@@ -14,8 +14,8 @@ RESULT_COLOR:Literal['red'] = 'red'
 FILE_PATH_COLOR:Literal['dark_grey'] = 'dark_grey'
 
 # returns files that contain the given text
-def grep(text:str, node:str) -> list[str]:
-    shell = subprocess.run(['grep', '-rIil', '--', text, node], capture_output=True)
+def grep(text:str, file_or_folder:str) -> list[str]:
+    shell = subprocess.run(['grep', '-rIil', '--', text, file_or_folder], capture_output=True)
     if shell.returncode != 0:
         return []
 
